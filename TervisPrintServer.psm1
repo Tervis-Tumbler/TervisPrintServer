@@ -12,7 +12,7 @@ function Install-PrintServerDriversFromWindowsUpdate {
     param (
         [Parameter(ValueFromPipelineByPropertyName)]$ComputerName
     )
-    Invoke-Command -ScriptBlock {
+    Invoke-Command -ComputerName $ComputerName -ScriptBlock {
         $BrotherHL6180DWDriver = Get-WindowsDriver -Online | 
         where providername -eq Brother |
         where ClassName -eq Printer |
