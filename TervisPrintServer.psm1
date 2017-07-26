@@ -2,8 +2,8 @@
     param (
         $EnvironmentName
     )
-    Invoke-ClusterApplicationProvision -ClusterApplicationName PrintServer -EnvironmentName $EnvironmentName
-    $Nodes = Get-TervisClusterApplicationNode -ClusterApplicationName PrintServer -EnvironmentName $EnvironmentName
+    Invoke-ApplicationProvision -ApplicationName PrintServer -EnvironmentName $EnvironmentName
+    $Nodes = Get-TervisApplicationNode -ApplicationName PrintServer -EnvironmentName $EnvironmentName
     $Nodes | Install-PrintServerDriversFromWindowsUpdate
     $Nodes | Add-PointAndPrintRegistryKeys
 }
