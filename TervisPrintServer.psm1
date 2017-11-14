@@ -1,4 +1,23 @@
-﻿function Invoke-PrintServerProvision {
+﻿$PrintDriverDefinition = [PSCustomObject][Ordered]@{
+    ProviderName = "Brother"
+    Version = "1.5.0.0"
+    WindowsUpdateURL = "http://download.windowsupdate.com/msdownload/update/driver/drvs/2012/09/20501715_fe2de9f3194ab758a30d4736e7bfcee408f187dd.cab"
+    INFFileName = "BROHLB1A.INF"
+},
+[PSCustomObject][Ordered]@{
+    ProviderName = "Kyocera"
+    Version = "6.0.2726.0"
+    WindowsUpdateURL = "http://download.windowsupdate.com/d/msdownload/update/driver/drvs/2016/03/200013427_1013740d1e5cc42a416b12d6e570122a8763d46e.cab"
+    INFFileName = "OEMSETUP.INF"
+},
+[PSCustomObject][Ordered]@{
+    ProviderName = "Zebra"
+    Version = "5.1.7.6290"
+    WindowsUpdateURL = "http://download.windowsupdate.com/c/msdownload/update/driver/drvs/2016/06/20857735_abfb8f058ce8dd7bbb70ec4a7df3947f81b204a8.cab"
+    INFFileName = "ZBRN.inf"
+}
+
+function Invoke-PrintServerProvision {
     param (
         $EnvironmentName
     )
@@ -10,42 +29,36 @@
 
 function Install-PrintServerDriversFromWindowsUpdate {
     param (
+        [Parameter(Mandatory,ValueFromPipelineByPropertyName)]$ComputerName,
+        [Parameter(Mandatory,ValueFromPipelineByPropertyName)]$ProviderName,
+        [Parameter(Mandatory,ValueFromPipelineByPropertyName)]$Version,
+        [Parameter(Mandatory,ValueFromPipelineByPropertyName)]$WindowsUpdateURL,
+        [Parameter(Mandatory,ValueFromPipelineByPropertyName)]$INFFileName
+    )
+    process {
+        Invoke-Command -ComputerName $ComputerName -ScriptBlock {
+            $Driver = Get-WindowsDriver -Online | 
+            where ProviderName -eq $Using:ProviderName |
+            where ClassName -eq Printer |
+            where Version -eq $Using:Version
+            if (-not $Driver) {
+                Invoke-WebRequest $Using:WindowsUpdateURL -OutFile $env:TEMP\Driver.cab
+                New-Item -Path $env:TEMP\Driver -ItemType Directory
+                expand.exe -F:* $env:TEMP\Driver.cab $env:TEMP\Driver
+                pnputil.exe -i -a $env:TEMP\Driver\$Using:INFFileName
+                Remove-Item -Path $env:TEMP\Driver -Recurse
+            }
+        }
+    }
+}
+
+function Install-PrintServerDriversFromWindowsUpdate {
+    param (
         [Parameter(ValueFromPipelineByPropertyName)]$ComputerName
     )
-    Invoke-Command -ComputerName $ComputerName -ScriptBlock {
-        $BrotherHL6180DWDriver = Get-WindowsDriver -Online | 
-        where providername -eq Brother |
-        where ClassName -eq Printer |
-        where Version -eq 1.5.0.0
-        if (-not $BrotherHL6180DWDriver) {
-            Invoke-WebRequest http://download.windowsupdate.com/msdownload/update/driver/drvs/2012/09/20501715_fe2de9f3194ab758a30d4736e7bfcee408f187dd.cab -OutFile $env:TEMP\BrotherHL6180DWDriver.cab
-            New-Item -Path $env:TEMP\BrotherHL6180DWDriver -ItemType Directory
-            expand.exe -F:* $env:TEMP\BrotherHL6180DWDriver.cab $env:TEMP\BrotherHL6180DWDriver
-            pnputil.exe -i -a $env:TEMP\BrotherHL6180DWDriver\BROHLB1A.INF
-        }
-
-        $KyoceraUniversalDriver = Get-WindowsDriver -Online | 
-        where providername -eq Kyocera |
-        where ClassName -eq Printer |
-        where Version -eq 6.0.2726.0
-        if (-not $KyoceraUniversalDriver) {
-            Invoke-WebRequest http://download.windowsupdate.com/d/msdownload/update/driver/drvs/2013/11/20557306_dad42303dba3df7ee060e26fffd35cd483bf7844.cab -OutFile $env:TEMP\KyoceraUniversalDriver.cab
-            New-Item -Path $env:TEMP\KyoceraUniversalDriver -ItemType Directory
-            expand.exe -F:* $env:TEMP\KyoceraUniversalDriver.cab $env:TEMP\KyoceraUniversalDriver
-            pnputil.exe -i -a $env:TEMP\KyoceraUniversalDriver\OEMSETUP.INF
-        }
-
-        $ZebraDriver = Get-WindowsDriver -Online | 
-        where providername -eq zebra |
-        where ClassName -eq Printer |
-        where Version -eq 5.1.7.6290
-        if (-not $ZebraDriver) {
-            Invoke-WebRequest http://download.windowsupdate.com/c/msdownload/update/driver/drvs/2016/06/20857735_abfb8f058ce8dd7bbb70ec4a7df3947f81b204a8.cab -OutFile $env:TEMP\ZDesigner.cab
-            New-Item -Path $env:TEMP\zdesigner -ItemType Directory
-            expand.exe -F:* $env:TEMP\zdesigner.cab $env:TEMP\zdesigner
-            pnputil.exe -i -a $env:TEMP\zdesigner\ZBRN.inf
-        }
-    } @PSBoundParameters
+    $PrintDriverDefinition | 
+    Where ProviderName -In Brother,Kyocera,Zebra |
+    Install-PrintServerDriversFromWindowsUpdate
 }
 
 function Add-PointAndPrintRegistryKeys {
