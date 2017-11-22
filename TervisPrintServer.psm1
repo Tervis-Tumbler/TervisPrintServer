@@ -23,8 +23,8 @@ function Invoke-PrintServerProvision {
     )
     Invoke-ApplicationProvision -ApplicationName PrintServer -EnvironmentName $EnvironmentName
     $Nodes = Get-TervisApplicationNode -ApplicationName PrintServer -EnvironmentName $EnvironmentName
-    $Nodes | Install-PrintServerDriversFromWindowsUpdate
-    $Nodes | Add-PointAndPrintRegistryKeys
+    $Nodes | Install-PrintServerDriversFromWindowsUpdateAll
+    $Nodes | Add-PointAndPrintRegistryKeys 
 }
 
 function Install-PrintServerDriversFromWindowsUpdate {
@@ -52,13 +52,15 @@ function Install-PrintServerDriversFromWindowsUpdate {
     }
 }
 
-function Install-PrintServerDriversFromWindowsUpdate {
+function Install-PrintServerDriversFromWindowsUpdateAll {
     param (
         [Parameter(ValueFromPipelineByPropertyName)]$ComputerName
     )
-    $PrintDriverDefinition | 
-    Where ProviderName -In Brother,Kyocera,Zebra |
-    Install-PrintServerDriversFromWindowsUpdate
+    process {
+        $PrintDriverDefinition |
+        Where ProviderName -In Brother,Kyocera,Zebra |
+        Install-PrintServerDriversFromWindowsUpdate -ComputerName $ComputerName
+    }
 }
 
 function Add-PointAndPrintRegistryKeys {
