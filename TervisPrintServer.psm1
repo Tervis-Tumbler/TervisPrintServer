@@ -1,21 +1,6 @@
-﻿$PrintDriverDefinition = [PSCustomObject][Ordered]@{
-    ProviderName = "Brother"
-    Version = "1.5.0.0"
-    WindowsUpdateURL = "http://download.windowsupdate.com/msdownload/update/driver/drvs/2012/09/20501715_fe2de9f3194ab758a30d4736e7bfcee408f187dd.cab"
-    INFFileName = "BROHLB1A.INF"
-},
-[PSCustomObject][Ordered]@{
-    ProviderName = "Kyocera"
-    Version = "6.0.2726.0"
-    WindowsUpdateURL = "http://download.windowsupdate.com/d/msdownload/update/driver/drvs/2016/03/200013427_1013740d1e5cc42a416b12d6e570122a8763d46e.cab"
-    INFFileName = "OEMSETUP.INF"
-},
-[PSCustomObject][Ordered]@{
-    ProviderName = "Zebra"
-    Version = "5.1.7.6290"
-    WindowsUpdateURL = "http://download.windowsupdate.com/c/msdownload/update/driver/drvs/2016/06/20857735_abfb8f058ce8dd7bbb70ec4a7df3947f81b204a8.cab"
-    INFFileName = "ZBRN.inf"
-}
+﻿$ModulePath = (Get-Module -ListAvailable TervisPrintServer).ModuleBase
+. $ModulePath\Definition.ps1
+
 
 function Invoke-PrintServerProvision {
     param (
@@ -57,8 +42,8 @@ function Install-PrintServerDriversFromWindowsUpdateAll {
         [Parameter(ValueFromPipelineByPropertyName)]$ComputerName
     )
     process {
-        $PrintDriverDefinition |
-        Where ProviderName -In Brother,Kyocera,Zebra |
+        $PrintDriverInstallDefinition |
+        Where ProviderName -In Brother,"KYOCERA Document Solutions Inc.",Zebra |
         Install-PrintServerDriversFromWindowsUpdate -ComputerName $ComputerName
     }
 }
@@ -89,3 +74,113 @@ function Add-PointAndPrintRegistryKeys {
 
         }
 }
+
+function Get-PrintServerPrinterDefinitionPSCustomObjectStanza {
+    $Printers = Get-TervisPrinter
+    
+    $PrinterPSCustomObjects = $Printers |
+    Select-object -Property Name,Vendor,Model,ServicedBy,DPI,LabelWidth,LabelLength,MediaType,DriverName,Location
+    $PrinterPSCustomObjects | ConvertTo-PSCustomObjectStanza
+
+    $PrinterPSCustomObjects | 
+    Where-Object Vendor -eq "Kyocera" |
+    ConvertTo-PSCustomObjectStanza
+}
+
+function Install-TervisPrinters {
+    param (
+        [Parameter(Mandatory,ValueFromPipelineByPropertyName)]$ComputerName
+    )
+    process {
+        Add-PrinterDriver -Name "ZDesigner 110Xi4 203 dpi" -ComputerName $ComputerName
+
+        if (-not (Test-WCSPrintersInstalled @PSBoundParameters)) {
+            Get-WCSEquipment -EnvironmentName $EnvironmentName -PrintEngineOrientationRelativeToLabel $PrintEngineOrientationRelativeToLabel |
+            Add-LocalWCSPrinter -ComputerName $ComputerName
+        }
+
+        if (-not (Test-WCSPrintersInstalled @PSBoundParameters)) {
+            Throw "Couldn't install some printers or ports. To identify the missing  run Test-WCSPrintersInstalled -Verbose -ComputerName $ComputerName -PrintEngineOrientationRelativeToLabel $PrintEngineOrientationRelativeToLabel -EnvironmentName $EnvironmentName"
+        }
+    }
+}
+
+function Update-TervisPrinters {
+    param (
+        [Parameter(Mandatory,ValueFromPipelineByPropertyName)]$ComputerName,
+        [Parameter(Mandatory,ValueFromPipelineByPropertyName)]$EnvironmentName,
+        [Parameter(Mandatory)][ValidateSet("Top","Bottom")]$PrintEngineOrientationRelativeToLabel
+    )
+    process {
+        Get-WCSEquipment -EnvironmentName $EnvironmentName -PrintEngineOrientationRelativeToLabel $PrintEngineOrientationRelativeToLabel |
+        Add-LocalWCSPrinter -ComputerName $ComputerName -Force
+    }
+}
+
+function Test-TervisPrintersInstalled {
+    [CMDLetBinding()]
+    param (
+        [Parameter(Mandatory)]$ComputerName,
+        [Parameter(Mandatory)]$EnvironmentName,
+        [Parameter(Mandatory)][ValidateSet("Top","Bottom")]$PrintEngineOrientationRelativeToLabel
+    )
+    $Equipment = Get-WCSEquipment -EnvironmentName $EnvironmentName -PrintEngineOrientationRelativeToLabel $PrintEngineOrientationRelativeToLabel
+    $PrinterPorts = Get-PrinterPort -ComputerName $ComputerName
+    $Printers = Get-Printer -ComputerName $ComputerName
+
+    $MissingPorts = Compare-Object -ReferenceObject ($Equipment.HostID | sort -Unique) -DifferenceObject $PrinterPorts.Name | 
+    where SideIndicator -EQ "<="
+    $MissingPorts | Write-VerboseAdvanced -Verbose:($VerbosePreference -ne "SilentlyContinue")
+
+    $MissingPrinters = Compare-Object -ReferenceObject $Equipment.ID -DifferenceObject $Printers.Name | 
+    where SideIndicator -EQ "<="
+    $MissingPrinters | Write-VerboseAdvanced -Verbose:($VerbosePreference -ne "SilentlyContinue")
+
+    -not $MissingPorts -and -not $MissingPrinters
+}
+
+function Add-TervisPrinter {
+    param(
+        [Parameter(Mandatory, ValueFromPipelineByPropertyName)]$Name,
+        [Parameter(Mandatory, ValueFromPipelineByPropertyName)]$DriverName,
+        [Parameter(Mandatory)]$ComputerName,
+        [Switch]$Shared,
+        [Switch]$Force
+    )
+    process {
+        Add-PrinterDriver -Name $DriverName -ComputerName $ComputerName
+        if ($Force) {
+            Remove-Printer -Name $Name -ComputerName $ComputerName -ErrorAction SilentlyContinue
+            Remove-PrinterPort -Name $Name -ComputerName $ComputerName -ErrorAction SilentlyContinue
+        }        
+        Add-PrinterPort -Name $Name -PrinterHostAddress $Name -ComputerName $ComputerName -ErrorAction SilentlyContinue
+        if ($Shared) {
+            Add-Printer -PortName $Name -Name $Name -DriverName $DriverName -ComputerName $ComputerName -ErrorAction SilentlyContinue -Shared -ShareName $Name
+        } else {
+            Add-Printer -PortName $Name -Name $Name -DriverName $DriverName -ComputerName $ComputerName -ErrorAction SilentlyContinue
+        }
+    }
+}
+
+function Remove-TervisPrinter {
+    param(
+        [Parameter(Mandatory, ValueFromPipelineByPropertyName)]$ID,
+        [Parameter(Mandatory, ValueFromPipelineByPropertyName)]$HostID,
+        $ComputerName
+    )
+    begin {
+        $ComputerNameParameter = $PSBoundParameters | 
+        ConvertFrom-PSBoundParameters | 
+        where ComputerName
+    }
+    process {
+        if ($ComputerName) {
+            Remove-Printer -Name $ID -ComputerName $ComputerName 
+            Remove-PrinterPort -Name $HostID -ComputerName $ComputerNameet
+        } else {
+            Remove-Printer -Name $ID
+            Remove-PrinterPort -Name $HostID
+        }
+    }
+}
+
