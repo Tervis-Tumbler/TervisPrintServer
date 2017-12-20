@@ -9,7 +9,8 @@ function Invoke-PrintServerProvision {
     Invoke-ApplicationProvision -ApplicationName PrintServer -EnvironmentName $EnvironmentName
     $Nodes = Get-TervisApplicationNode -ApplicationName PrintServer -EnvironmentName $EnvironmentName
     $Nodes | Install-PrintServerDriversFromWindowsUpdateAll
-    $Nodes | Add-PointAndPrintRegistryKeys 
+    $Nodes | Add-PointAndPrintRegistryKeys
+    $Nodes | Set-AllPrinterDriversToPackaged
 }
 
 function Install-PrintServerDriversFromWindowsUpdate {
