@@ -40,6 +40,11 @@ Kyocera FS-4300DN KX
 
 $PrinterDefinition = [PSCustomObject][Ordered]@{
     DriverName = "Brother HL-6180DW series"
-    Location = "Innovation Center"
+    Location = "Large Cafe"
     Name = "BlackCat"
+},
+[PSCustomObject][Ordered]@{
+    Name = "KingOfTheGrill"
+    DriverName = "Brother HL-6180DW series"
+    Location = "Small Cafe"
 }
